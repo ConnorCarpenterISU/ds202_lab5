@@ -1,0 +1,118 @@
+---
+title: "DS202_lab5"
+author: "Connor Carpenter"
+date: "4/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+acc <- read.csv("https://raw.githubusercontent.com/xdaiISU/ds202materials/master/hwlabs/fars2017/accident.csv", stringsAsFactors = FALSE)
+
+per <- read.csv("https://raw.githubusercontent.com/xdaiISU/ds202materials/master/hwlabs/fars2017/person.csv", stringsAsFactors = FALSE)
+```
+# Part one
+
+### 1
+```{r}
+library(dplyr)
+
+acc %>% group_by(DAY_WEEK) %>% summarize(n = n())
+```
+Accidents are more common Fri-Sun
+
+### 2
+```{r}
+library(ggplot2)
+acc %>% group_by(HOUR) %>% filter(HOUR < 25) %>% summarize(n = n()) %>% ggplot(aes(x = HOUR, y = n)) + geom_col() + geom_smooth()
+```
+
+wave like relationship peaking at 6pm and an upturn around 6am. These are likely work commute incidents
+
+### 3
+```{r}
+sum(acc$DRUNK_DR)
+```
+
+# Part two
+
+### 4
+```{r}
+perDriver <- per %>% filter(PER_TYP == 1)
+```
+
+### 5
+```{r}
+accPer <- acc %>% left_join(per, by = "ST_CASE")
+```
+
+### 6
+```{r}
+DWLabs <- c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+names(DWLabs) <- c(1,2,3,4,5,6,7)
+
+accPer %>% group_by(DAY_WEEK, HOUR.x, SEX) %>% summarize(n = n()) %>% filter(SEX < 3, HOUR.x < 25) %>% ggplot(aes(x = HOUR.x, y = n, fill = factor(SEX))) + geom_col(colour = "black") + facet_wrap(~DAY_WEEK, labeller = labeller(DAY_WEEK = DWLabs )) + labs(title = "Plot of Accidents by Hour and Weekday by Gender", x = "Hour", y = "Count", fill = "Sex") + scale_fill_discrete(breaks = c(1, 2), labels = c("Male", "Female"))
+```
+
+# Part 3
+
+### 7)
+```{r}
+library(maps)
+
+glc <- readxl::read_xlsx("glc.xlsx")
+
+glc$`State Code` <- as.numeric(glc$`State Code`)
+glc$`County Code` <- as.numeric(glc$`County Code`)
+
+glcTuned <- glc %>% select(`State Name`, `State Code`, `County Name`, `County Code`)
+glcTuned <- unique(glcTuned)
+
+helper <- acc %>% group_by(STATE, COUNTY) %>% summarize(n = n())
+
+what <- helper %>% left_join(glcTuned, by = c(STATE = 'State Code', COUNTY = 'County Code'))
+
+what$`State Name` <- tolower(what$`State Name`)
+what$`County Name` <- tolower(what$`County Name`)
+
+counties <- map_data('county')
+
+counties %>% full_join(what, by = c(region = 'State Name', subregion = 'County Name')) %>% ggplot(aes(x = long, y = lat, fill = n)) + geom_polygon(aes(group=group)) + labs(title = "Accidents by County")
+```
+ 
+### 9)
+```{r}
+glc$`State Code` <- as.numeric(glc$`State Code`)
+glc$`County Code` <- as.numeric(glc$`County Code`)
+
+glcTuned <- glc %>% select(`State Name`, `State Code`)
+glcTuned <- unique(glcTuned)
+
+helper <- acc %>% group_by(STATE) %>% summarize(n = n())
+
+winter <- acc %>% filter(MONTH %in% c(12,1,2)) %>% group_by(STATE) %>% summarize(n = n())
+summer <- acc %>% filter(MONTH %in% c(7,8,9)) %>% group_by(STATE) %>% summarize(n = n())
+
+helper$wRatio <- winter$n / helper$n
+helper$sRatio <- summer$n / helper$n
+
+what <- helper %>% left_join(glcTuned, by = c(STATE = 'State Code'))
+
+what$`State Name` <- tolower(what$`State Name`)
+
+states <- map_data('state')
+
+states %>% full_join(what, by = c(region = 'State Name')) %>% ggplot(aes(x = long, y = lat, fill = wRatio)) + geom_polygon(aes(group=group)) + labs(title = "Ratio of Accidents in Winter by State")
+
+states %>% full_join(what, by = c(region = 'State Name')) %>% ggplot(aes(x = long, y = lat, fill = sRatio)) + geom_polygon(aes(group=group)) + labs(title = "Ratio of Accidents in Summer by State")
+```
+
+```{r}
+sum(winter$n)
+sum(summer$n)
+```
+
+summer has more accidents, this might be due to more drivers being on the road
